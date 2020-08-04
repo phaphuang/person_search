@@ -52,10 +52,21 @@ def visualize_result(img_path, detections, similarities):
             fontsize=20,
             color="white",
         )
-    plt.tight_layout()
+    #plt.tight_layout()
     fig.savefig(img_path.replace("gallery", "result"))
-    plt.show()
-    plt.close(fig)
+    #plt.show()
+    #plt.close(fig)
+
+def visualize_video(frame, detections, similarities):
+    out_frame = frame.copy()
+    for detection, sim in zip(detections, similarities):
+        x1, y1, x2, y2, _ = detection
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        print(x1, x2, y1, y2)
+        cv2.rectangle(out_frame, (x1, y1), (x2, y2), (255,0,0), 1)
+        cv2.putText(out_frame, "{:.2f}".format(sim), ((x1+5), (y1-18)), cv2.FONT_HERSHEY_SIMPLEX, color=(0,0,0), fontScale=1)
+    
+    return out_frame
 
 
 if __name__ == "__main__":
@@ -76,6 +87,7 @@ if __name__ == "__main__":
     device = torch.device("cuda:%s" % args.gpu if args.gpu != -1 else "cpu")
     net.to(device)
 
+    """
     # Extract feature of the query person
     query_img = cv2.imread("imgs/query.jpg")
     query_roi = np.array([0, 0, 466, 943])  # [x1, y1, x2, y2]
@@ -94,3 +106,60 @@ if __name__ == "__main__":
 
         # Visualize the results
         visualize_result(gallery_img, detections, similarities)
+    """
+
+    #### For video file
+    cap = cv2.VideoCapture("data/dataset/video/handmovewhite.mp4")
+
+    #### For video camera
+    #cap = cv2.VideoCapture(0)
+
+    query_img = cv2.imread("data/dataset/video/query.png")
+    query_roi = np.array([0, 0, 313, 733])
+    query_feat = net.inference(query_img, query_roi).view(-1, 1)
+
+    scale_percent = 50
+    width = int(cap.get(3) * scale_percent / 100)
+    height = int(cap.get(4) * scale_percent / 100)
+    dim = (width, height)
+
+    output_video = cv2.VideoWriter("output/output_video.avi", cv2.VideoWriter_fourcc('M','J','P','G'), 20.0, (width, height))
+
+    no_frame = 1
+    while cap.isOpened():
+        ret, frame = cap.read()
+
+        if not ret:
+            print("Can't receive frame (stream end?). Exiting ...")
+
+        frame = cv2.resize(frame, dim, interpolation=cv2.INTER_AREA)
+
+        #cv2.imshow("Input video", frame)
+        
+        
+        logging.info("Detecting Frame %d" % no_frame)
+        detections, features = net.inference(frame)
+
+        # Compute pairwise cosine similarities,
+        # which equals to inner-products, as features are already L2-normed
+        similarities = features.mm(query_feat).squeeze()
+
+        print(detections.tolist(), similarities.tolist())
+
+        # Visualize the results
+        out_frame = visualize_video(frame, detections.tolist(), [similarities.tolist()])
+
+        output_video.write(out_frame)
+        cv2.imshow("Output video", out_frame)
+        
+        if cv2.waitKey(1) == ord('q'):
+            break
+        
+        no_frame += 1
+    
+    cap.release()
+    output_video.release()
+    cv2.destroyAllWindows()
+        
+        
+        

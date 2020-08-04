@@ -205,3 +205,6 @@ caffe2.egg-info
 # cython generated files
 lib/model/utils/bbox.c
 lib/pycocotools/_mask.c
+
+# output video
+output
